@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>App de Gastos por Maribel Alba</title>
+    
+    <!-- React y Babel para JSX -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class', // Habilitar modo oscuro
+      }
+    </script>
+    <style>
+        /* Estilos adicionales para una mejor apariencia */
+        body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+    </style>
+</head>
+<body class="bg-gray-50 dark:bg-gray-900">
+    <div id="root"></div>
+
+    <script type="text/babel">
+      // --- El código completo de tu componente App va aquí ---
+
+      // --- Constantes y Datos Iniciales ---
+      const INITIAL_CATEGORIES = {
+        apps: { name: 'Apps y Software', color: '#4CAF50', icon: '📱' },
+        services: { name: 'Servicios del Hogar', color: '#9C27B0', icon: '💡' },
+        finance: { name: 'Finanzas y Seguros', color: '#2196F3', icon: '🏦' },
+        entertainment: { name: 'Ocio y Entretenimiento', color: '#FFB300', icon: '🎬' },
+        others: { name: 'Otros', color: '#795548', icon: '⭐' },
+      };
+
+      const INITIAL_SUBS = [
+        { id: 'sub1', name: 'Netflix', price: 15, category: 'entertainment', icon: '🎬', cycle: 'Mensual', nextPaymentDate: '2025-10-22', history: ['22 Ago 2025 — $15', '22 Jul 2025 — $15'] },
+        { id: 'sub2', name: 'Spotify', price: 10, category: 'entertainment', icon: '🎵', cycle: 'Mensual', nextPaymentDate: '2025-10-25', history: ['25 Sep 2025 — $10', '25 Ago 2025 — $10'] },
+        { id: 'sub3', name: 'Recibo de Luz', price: 55, category: 'services', icon: '💡', cycle: 'Bimestral', nextPaymentDate: '2025-11-01', history: ['01 Sep 2025 — $55'] },
+        { id: 'sub4', name: 'Hipoteca', price: 600, category: 'finance', icon: '🏠', cycle: 'Mensual', nextPaymentDate: '2025-11-10', history: ['10 Sep 2025 — $600'] },
+        { id: 'sub5', name: 'Figma', price: 25, category: 'apps', icon: '🎨', cycle: 'Anual', nextPaymentDate: '2025-10-25', history: ['15 Ene 2025 — $25'] },
+      ];
+
+
+      // --- Componentes Reutilizables ---
+      function Card({ children, className = '', onClick }) {
+        const baseClasses = 'bg-white dark:bg-gray-800 rounded-2xl shadow-md p-5 transition-transform duration-200';
+        const hoverClasses = onClick ? 'hover:scale-105 hover:shadow-lg cursor-pointer' : '';
+        return <div className={`${baseClasses} ${hoverClasses} ${className}`} style={{ boxShadow: '0 8px 24px rgba(0,0,0,0.08)' }} onClick={onClick}>{children}</div>;
+      }
+
+      function Header({ title, subtitle }) {
+        return (
+          <div className="mb-6">
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{title}</h1>
+            {subtitle && <p className="text-gray-500 dark:text-gray-400 mt-1">{subtitle}</p>}
+          </div>
+        );
+      }
+
+      // --- Componentes de Vistas ---
+      function Dashboard({ subs, categories, onSelectSub, onShowForm }) {
+        if (!subs || subs.length === 0) {
+          return (
+            <div>
+              <Header title="Bienvenido ✨" subtitle="Aún no tienes suscripciones." />
+              <div className="text-center mt-12 p-6 bg-white dark:bg-gray-800 rounded-2xl shadow-md">
+                <p className="text-gray-500 dark:text-gray-400">Agrega tu primer gasto o suscripción para empezar a llevar el control.</p>
+                <button onClick={onShowForm} className="mt-6 bg-blue-600 text-white font-semibold px-6 py-3 rounded-xl shadow-lg hover:bg-blue-700 transition-all transform hover:scale-105">Agregar Suscripción</button>
+              </div>
+            </div>
+          );
+        }
+
+        const totalMonthly = React.useMemo(() => subs.reduce((acc, s) => {
+          const price = Number(s.price) || 0;
+          if (s.cycle === 'Mensual') return acc + price;
+          if (s.cycle === 'Anual') return acc + price / 12;
+          if (s.cycle === 'Trimestral') return acc + price / 3;
+          if (s.cycle === 'Bimestral') return acc + price / 2;
+          if (s.cycle === 'Semanal') return acc + price * 4;
+          return acc;
+        }, 0), [subs]);
+
+        const sortedSubs = React.useMemo(() => [...subs].sort((a, b) => new Date(a.nextPaymentDate) - new Date(b.nextPaymentDate)), [subs]);
+        const nextPayment = sortedSubs[0];
+
+        const formatDate = (dateString) => new Date(dateString + 'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
+        const daysRemaining = (dateString) => {
+          const today = new Date();
+          today.setHours(0,0,0,0);
+          const paymentDate = new Date(dateString + 'T00:00:00');
+          const diffTime = paymentDate - today;
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          
+          if (diffDays < 0) return 'Vencido';
+          if (diffDays === 0) return 'Hoy';
+          if (diffDays === 1) return 'Mañana';
+          return `En ${diffDays} días`;
+        };
+
+        return (
+          <div>
+            <Header title="Hola de nuevo ✨" subtitle="Este es el resumen de tus suscripciones." />
+            <Card>
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-gray-500 dark:text-gray-400 text-sm">Gasto Mensual Estimado</div>
+                  <div className="text-4xl font-extrabold text-gray-900 dark:text-white">${totalMonthly.toFixed(2)}</div>
+                </div>
+                <div className="rounded-xl p-4 bg-blue-100 dark:bg-blue-900/50"><span className="text-2xl">{nextPayment.icon}</span></div>
+              </div>
+              <div className="mt-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4 flex items-center gap-3">
+                <span className="text-xl">{nextPayment.icon}</span>
+                <div className="flex-1">
+                  <div className="text-gray-500 dark:text-gray-400 text-xs">Próximo pago ({daysRemaining(nextPayment.nextPaymentDate)})</div>
+                  <div className="font-semibold text-gray-800 dark:text-gray-200">{nextPayment.name} · {formatDate(nextPayment.nextPaymentDate)}</div>
+                </div>
+                <div className="font-bold text-lg text-gray-900 dark:text-white">${Number(nextPayment.price).toFixed(2)}</div>
+              </div>
+            </Card>
+            <div className="mt-8">
+              <h2 className="text-xl font-bold mb-3 text-gray-900 dark:text-white">Próximos Pagos</h2>
+              <div className="space-y-3">
+                {sortedSubs.map(s => (
+                  <Card key={s.id} onClick={() => onSelectSub(s.id)}>
+                    <div className="flex items-center">
+                      <div className="p-3 rounded-xl mr-4 bg-gray-100 dark:bg-gray-700"><span className="text-xl">{s.icon}</span></div>
+                      <div className="flex-1">
+                        <div className="font-semibold text-gray-800 dark:text-gray-200">{s.name}</div>
+                        <div className="text-gray-500 dark:text-gray-400 text-sm">{daysRemaining(s.nextPaymentDate)}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-bold text-base text-gray-900 dark:text-white">${Number(s.price).toFixed(2)}</div>
+                        <div className="text-gray-500 dark:text-gray-400 text-xs">{s.cycle}</div>
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </div>
+            <button onClick={onShowForm} className="fixed bottom-24 right-5 bg-blue-600 text-white rounded-full w-14 h-14 flex items-center justify-center shadow-xl text-3xl hover:bg-blue-700 transition-all transform hover:scale-110">
+              +
+            </button>
+          </div>
+        );
+      }
+
+      function CalendarView({ subs }) {
+          const [currentDate, setCurrentDate] = React.useState(new Date());
+
+          const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+          const daysOfWeek = [
+              { key: 'sun', label: 'DOM' }, { key: 'mon', label: 'LUN' }, { key: 'tue', label: 'MAR' },
+              { key: 'wed', label: 'MIÉ' }, { key: 'thu', label: 'JUE' }, { key: 'fri', label: 'VIE' }, { key: 'sat', label: 'SÁB' }
+          ];
+
+          const { firstDayOfMonth, daysInMonth } = React.useMemo(() => {
+              const year = currentDate.getFullYear();
+              const month = currentDate.getMonth();
+              return {
+                  firstDayOfMonth: new Date(year, month, 1).getDay(),
+                  daysInMonth: new Date(year, month + 1, 0).getDate(),
+              };
+          }, [currentDate]);
+
+          const subsByDate = React.useMemo(() => {
+              return subs.reduce((acc, sub) => {
+                  const date = new Date(sub.nextPaymentDate + 'T00:00:00');
+                  const day = date.getDate();
+                  const month = date.getMonth();
+                  const year = date.getFullYear();
+
+                  if (currentDate.getFullYear() === year && currentDate.getMonth() === month) {
+                       if (!acc[day]) acc[day] = [];
+                       acc[day].push(sub);
+                  }
+                  return acc;
+              }, {});
+          }, [subs, currentDate]);
+          
+          const getPaymentStatusColors = (paymentDateStr) => {
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              const paymentDate = new Date(paymentDateStr + 'T00:00:00');
+              const diffDays = Math.ceil((paymentDate - today) / (1000 * 60 * 60 * 24));
+
+              if (diffDays < 0) return 'bg-red-200/60 text-red-800 dark:bg-red-500/30 dark:text-red-300';
+              if (diffDays <= 5) return 'bg-yellow-200/60 text-yellow-800 dark:bg-yellow-500/30 dark:text-yellow-300';
+              if (diffDays > 10) return 'bg-green-200/60 text-green-800 dark:bg-green-500/30 dark:text-green-300';
+              return 'bg-violet-200/60 text-violet-800 dark:bg-violet-500/30 dark:text-violet-300';
+          };
+
+          const generateICS = () => {
+              let icsContent = `BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//MyFinances//App//EN\n`;
+              subs.forEach(sub => {
+                  const date = sub.nextPaymentDate.replace(/-/g, '');
+                  icsContent += `BEGIN:VEVENT\n`;
+                  icsContent += `UID:${sub.id}@myfinances.app\n`;
+                  icsContent += `DTSTAMP:${new Date().toISOString().replace(/[-:.]/g, '')}Z\n`;
+                  icsContent += `DTSTART;VALUE=DATE:${date}\n`;
+                  icsContent += `SUMMARY:Pago: ${sub.name}\n`;
+                  icsContent += `DESCRIPTION:Monto a pagar: $${sub.price}. Ciclo: ${sub.cycle}.\n`;
+                  icsContent += `END:VEVENT\n`;
+              });
+              icsContent += `END:VCALENDAR`;
+
+              const blob = new Blob([icsContent], { type: 'text/calendar' });
+              const link = document.createElement('a');
+              link.href = URL.createObjectURL(blob);
+              link.download = 'vencimientos.ics';
+              link.click();
+          };
+
+          return (
+              <div>
+                  <div className="text-center mb-6">
+                       <div className="flex justify-between items-center">
+                          <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))} className="p-2 rounded-full hover:bg-fuchsia-100 dark:hover:bg-fuchsia-900/50 text-fuchsia-800 dark:text-fuchsia-200">&lt;</button>
+                          <h2 className="text-3xl font-serif font-bold text-fuchsia-800 dark:text-fuchsia-200">
+                             <span className="text-2xl text-fuchsia-300 dark:text-fuchsia-500 mr-2">✦</span> 
+                              {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
+                             <span className="text-2xl text-fuchsia-300 dark:text-fuchsia-500 ml-2">✦</span> 
+                          </h2>
+                          <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))} className="p-2 rounded-full hover:bg-fuchsia-100 dark:hover:bg-fuchsia-900/50 text-fuchsia-800 dark:text-fuchsia-200">&gt;</button>
+                      </div>
+                  </div>
+                   <div className="bg-white dark:bg-gray-800/50 p-4 rounded-2xl shadow-lg border border-fuchsia-100 dark:border-fuchsia-900">
+                      <div className="grid grid-cols-7 gap-2 text-center">
+                          {daysOfWeek.map(day => 
+                              <div key={day.key} className="font-bold text-xs text-fuchsia-700 dark:text-fuchsia-300 p-2 bg-fuchsia-100 dark:bg-fuchsia-900/50 rounded-lg">{day.label}</div>
+                          )}
+                          
+                          {Array.from({ length: firstDayOfMonth }).map((_, i) => <div key={`empty-${i}`}></div>)}
+
+                          {Array.from({ length: daysInMonth }).map((_, day) => {
+                              const dayNumber = day + 1;
+                              const subsForDay = subsByDate[dayNumber] || [];
+                              const today = new Date();
+                              const isToday = dayNumber === today.getDate() && currentDate.getMonth() === today.getMonth() && currentDate.getFullYear() === today.getFullYear();
+                              
+                              return (
+                                  <div key={dayNumber} className={`aspect-square rounded-lg p-1 flex flex-col relative border border-fuchsia-100 dark:border-gray-700/50`}>
+                                      <span className={`font-semibold text-[11px] absolute top-1 right-1.5 w-5 h-5 flex items-center justify-center rounded-full ${isToday ? 'bg-fuchsia-700 text-white dark:bg-fuchsia-300 dark:text-fuchsia-900' : 'text-gray-500 dark:text-gray-400'}`}>{dayNumber}</span>
+                                      <div className="overflow-y-auto space-y-1 mt-6 flex-grow">
+                                      {subsForDay.map(s => (
+                                          <div key={s.id} className={`rounded-md p-0.5 text-xs flex flex-col items-center justify-center ${getPaymentStatusColors(s.nextPaymentDate)}`}>
+                                              <span className="text-sm">{s.icon}</span>
+                                              <span className="font-semibold text-[9px] leading-tight truncate w-full text-center">{s.name}</span>
+                                          </div>
+                                      ))}
+                                      </div>
+                                  </div>
+                              );
+                          })}
+                      </div>
+                  </div>
+                  <button onClick={generateICS} className="w-full mt-6 bg-green-600 text-white font-semibold px-6 py-3 rounded-xl shadow-lg hover:bg-green-700 transition-all">Descargar para Google Calendar</button>
+              </div>
+          )
+      }
+
+      function ReportsView({ subs, categories }) {
+          const reportData = React.useMemo(() => {
+              const data = {};
+              let total = 0;
+              subs.forEach(sub => {
+                  const price = Number(sub.price) || 0;
+                  if (!data[sub.category]) {
+                      data[sub.category] = { total: 0, count: 0 };
+                  }
+                  data[sub.category].total += price;
+                  data[sub.category].count += 1;
+                  total += price;
+              });
+              return {
+                  byCategory: Object.entries(data).map(([catId, { total, count }]) => ({
+                      ...categories[catId],
+                      id: catId,
+                      total,
+                      count,
+                      percentage: total / (total > 0 ? total : 1) * 100,
+                  })).sort((a, b) => b.total - a.total),
+                  grandTotal: total
+              };
+          }, [subs, categories]);
+
+          return (
+              <div>
+                  <Header title="Reportes" subtitle={`Total de gastos: $${reportData.grandTotal.toFixed(2)}`} />
+                  <Card>
+                      <h3 className="font-bold mb-4 text-gray-800 dark:text-gray-200">Gastos por Categoría</h3>
+                      <div className="space-y-4">
+                          {reportData.byCategory.map(cat => (
+                              <div key={cat.id}>
+                                  <div className="flex justify-between items-center text-sm mb-1">
+                                      <span className="font-semibold text-gray-700 dark:text-gray-300">{cat.name} ({cat.count})</span>
+                                      <span className="text-gray-600 dark:text-gray-400">${cat.total.toFixed(2)}</span>
+                                  </div>
+                                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4">
+                                      <div className="h-4 rounded-full text-white text-xs flex items-center justify-center" style={{ width: `${cat.percentage}%`, backgroundColor: cat.color }}>
+                                          {cat.percentage > 10 ? `${cat.percentage.toFixed(0)}%` : ''}
+                                      </div>
+                                  </div>
+                              </div>
+                          ))}
+                      </div>
+                  </Card>
+              </div>
+          );
+      }
+
+      function SettingsView({ categories, onUpdateCategories, onReset, isDarkMode, onToggleDarkMode }) {
+
+          const handleReset = () => {
+              if(window.confirm('¿Estás seguro de que quieres borrar todos los datos? Esta acción no se puede deshacer.')) {
+                  onReset();
+              }
+          }
+          
+          return (
+              <div>
+                  <Header title="Ajustes" subtitle="Personaliza tu experiencia." />
+                  <Card>
+                      <h3 className="font-bold mb-4 text-gray-800 dark:text-gray-200">Apariencia</h3>
+                       <div className="flex items-center justify-between">
+                          <span className="text-gray-700 dark:text-gray-300">Modo Oscuro</span>
+                          <button onClick={onToggleDarkMode} className={`w-14 h-8 rounded-full flex items-center p-1 transition-colors ${isDarkMode ? 'bg-blue-600 justify-end' : 'bg-gray-300 justify-start'}`}>
+                              <div className="w-6 h-6 bg-white rounded-full shadow-md"></div>
+                          </button>
+                      </div>
+                  </Card>
+
+                  <div className="mt-6">
+                       <Card>
+                          <h3 className="font-bold mb-4 text-gray-800 dark:text-gray-200">Gestionar Datos</h3>
+                           <button onClick={handleReset} className="w-full bg-red-500 text-white font-semibold px-6 py-3 rounded-xl shadow-lg hover:bg-red-600 transition-all">
+                              Restablecer Datos
+                          </button>
+                       </Card>
+                  </div>
+              </div>
+          );
+      }
+
+      function SubscriptionDetail({ sub, categories, onClose, onEdit, onDelete }) {
+        if (!sub) return null;
+
+        return (
+          <div className="fixed inset-0 bg-black bg-opacity-40 z-40 flex items-center justify-center" onClick={onClose}>
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-t-3xl w-full max-w-md absolute bottom-0 p-5 pt-8" onClick={e => e.stopPropagation()}>
+              <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 text-2xl">&times;</button>
+              <div className="flex items-center mb-4">
+                <div className="p-4 rounded-2xl mr-4 bg-white dark:bg-gray-700 shadow-sm"><span className="text-4xl">{sub.icon}</span></div>
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{sub.name}</h2>
+                  <div className={`text-sm font-semibold px-2 py-0.5 rounded-full inline-block`} style={{backgroundColor: categories[sub.category].color+'20', color: categories[sub.category].color}}>
+                    {categories[sub.category].name}
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4 text-center my-6">
+                <div>
+                  <div className="text-gray-500 dark:text-gray-400 text-sm">Monto</div>
+                  <div className="font-bold text-2xl text-gray-900 dark:text-white">${Number(sub.price).toFixed(2)}</div>
+                </div>
+                <div>
+                  <div className="text-gray-500 dark:text-gray-400 text-sm">Ciclo</div>
+                  <div className="font-bold text-2xl text-gray-900 dark:text-white">{sub.cycle}</div>
+                </div>
+              </div>
+              <div className="mb-4">
+                  <h3 className="font-bold text-sm mb-2 text-gray-600 dark:text-gray-300">Historial de Pagos</h3>
+                  <div className="bg-white dark:bg-gray-700 rounded-xl p-3 space-y-2 max-h-32 overflow-y-auto">
+                      {sub.history.length > 0 ? sub.history.map((h, i) => (
+                          <div key={i} className="text-sm text-gray-700 dark:text-gray-300">{h}</div>
+                      )) : <div className="text-sm text-gray-500 dark:text-gray-400 text-center p-2">No hay historial.</div>}
+                  </div>
+              </div>
+              <div className="flex gap-3 mt-6">
+                <button onClick={() => onEdit(sub)} className="flex-1 bg-yellow-500 text-white rounded-xl py-3 font-semibold">Editar</button>
+                <button onClick={() => onDelete(sub.id)} className="flex-1 bg-red-500 text-white rounded-xl py-3 font-semibold">Eliminar</button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      function SubscriptionFormModal({ subToEdit, categories, onSave, onClose }) {
+        const isEditing = !!subToEdit;
+        const initialFormState = { name: '', price: '', category: 'apps', cycle: 'Mensual', icon: '', nextPaymentDate: new Date().toISOString().split('T')[0] };
+        const [form, setForm] = React.useState(initialFormState);
+        const [errors, setErrors] = React.useState({});
+
+        React.useEffect(() => {
+          setForm(isEditing ? subToEdit : initialFormState);
+        }, [subToEdit, isEditing]);
+        
+        const validate = () => {
+          const e = {};
+          if (!form.name.trim()) e.name = 'Nombre requerido';
+          if (form.price === '' || isNaN(Number(form.price)) || Number(form.price) <= 0) e.price = 'Precio válido';
+          if (!form.nextPaymentDate) e.nextPaymentDate = 'Fecha requerida';
+          setErrors(e);
+          return Object.keys(e).length === 0;
+        };
+
+        const handleSubmit = () => { if (validate()) { onSave(form); onClose(); } };
+        const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+
+        return (
+           <div className="fixed inset-0 bg-black bg-opacity-40 z-50 flex items-center justify-center p-4">
+              <div className="bg-white dark:bg-gray-800 w-full max-w-md rounded-2xl p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-bold dark:text-white">{isEditing ? 'Editar Suscripción' : 'Agregar Suscripción'}</h2>
+                  <button onClick={onClose} className="text-gray-500 dark:text-gray-400 text-2xl">&times;</button>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2"><label className="text-xs text-gray-500 dark:text-gray-400">Nombre</label><input name="name" value={form.name} onChange={handleChange} className="w-full border dark:border-gray-600 bg-transparent dark:text-white rounded-xl px-3 py-2 mt-1" placeholder="Ej. Agua" />{errors.name && <div className="text-xs text-red-500 mt-1">{errors.name}</div>}</div>
+                  <div><label className="text-xs text-gray-500 dark:text-gray-400">Precio ($)</label><input name="price" type="number" value={form.price} onChange={handleChange} className="w-full border dark:border-gray-600 bg-transparent dark:text-white rounded-xl px-3 py-2 mt-1" placeholder="Ej. 300" />{errors.price && <div className="text-xs text-red-500 mt-1">{errors.price}</div>}</div>
+                  <div><label className="text-xs text-gray-500 dark:text-gray-400">Fecha de vencimiento</label><input name="nextPaymentDate" type="date" value={form.nextPaymentDate} onChange={handleChange} className="w-full border dark:border-gray-600 bg-transparent dark:text-white rounded-xl px-3 py-2 mt-1" />{errors.nextPaymentDate && <div className="text-xs text-red-500 mt-1">{errors.nextPaymentDate}</div>}</div>
+                  <div><label className="text-xs text-gray-500 dark:text-gray-400">Categoría</label><select name="category" value={form.category} onChange={handleChange} className="w-full border dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-white rounded-xl px-3 py-2 mt-1">{Object.keys(categories).map(k => (<option key={k} value={k}>{categories[k].name}</option>))}</select></div>
+                  <div><label className="text-xs text-gray-500 dark:text-gray-400">Ciclo de Pago</label><select name="cycle" value={form.cycle} onChange={handleChange} className="w-full border dark:border-gray-600 bg-white dark:bg-gray-800 dark:text-white rounded-xl px-3 py-2 mt-1"><option>Semanal</option><option>Mensual</option><option>Bimestral</option><option>Trimestral</option><option>Anual</option></select></div>
+                  <div className="col-span-2"><label className="text-xs text-gray-500 dark:text-gray-400">Ícono (Emoji)</label><input name="icon" value={form.icon} onChange={handleChange} className="w-full border dark:border-gray-600 bg-transparent dark:text-white rounded-xl px-3 py-2 mt-1" placeholder="Ej. 💧" /></div>
+                </div>
+                <div className="flex gap-3 mt-6"><button onClick={onClose} className="flex-1 border border-gray-300 dark:border-gray-600 rounded-xl py-2.5 font-semibold dark:text-white">Cancelar</button><button onClick={handleSubmit} className="flex-1 bg-blue-600 text-white rounded-xl py-2.5 font-semibold">{isEditing ? 'Actualizar' : 'Guardar'}</button></div>
+              </div>
+            </div>
+        );
+      }
+
+      function ConfirmationModal({ message, onConfirm, onCancel }) {
+          return (
+              <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+                  <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-sm">
+                      <p className="text-lg font-semibold text-center mb-4 dark:text-white">{message}</p>
+                      <div className="flex gap-3"><button onClick={onCancel} className="flex-1 border border-gray-300 dark:border-gray-600 rounded-xl py-2 font-semibold dark:text-white">Cancelar</button><button onClick={onConfirm} className="flex-1 bg-red-500 text-white rounded-xl py-2 font-semibold">Confirmar</button></div>
+                  </div>
+              </div>
+          );
+      }
+
+      // --- Componente Principal ---
+      function App() {
+        const [tab, setTab] = React.useState('dashboard');
+        const [isDarkMode, setIsDarkMode] = React.useState(() => localStorage.getItem('darkMode') === 'true');
+
+        const useStickyState = (defaultValue, key) => {
+            const [value, setValue] = React.useState(() => {
+                const stickyValue = localStorage.getItem(key);
+                return stickyValue !== null ? JSON.parse(stickyValue) : defaultValue;
+            });
+            React.useEffect(() => {
+                localStorage.setItem(key, JSON.stringify(value));
+            }, [key, value]);
+            return [value, setValue];
+        };
+
+        const [subs, setSubs] = useStickyState(INITIAL_SUBS, 'subscriptions');
+        const [categories, setCategories] = useStickyState(INITIAL_CATEGORIES, 'categories');
+        
+        const [selectedSubId, setSelectedSubId] = React.useState(null);
+        const [showForm, setShowForm] = React.useState(false);
+        const [subToEdit, setSubToEdit] = React.useState(null);
+        const [confirmDelete, setConfirmDelete] = React.useState(null);
+
+        React.useEffect(() => {
+            document.documentElement.classList.toggle('dark', isDarkMode);
+            localStorage.setItem('darkMode', isDarkMode);
+        }, [isDarkMode]);
+        
+        const handleSaveSub = (formData) => {
+          const newSubData = { ...formData, price: Number(formData.price) };
+
+          setSubs(prevSubs => 
+            subToEdit 
+              ? prevSubs.map(s => s.id === subToEdit.id ? { ...s, ...newSubData } : s) 
+              : [...prevSubs, { ...newSubData, id: 'sub' + Date.now(), history: [] }]
+          );
+          
+          setSubToEdit(null);
+          setShowForm(false);
+        };
+
+        const handleEdit = (sub) => { setSelectedSubId(null); setSubToEdit(sub); setShowForm(true); };
+        const handleDeleteRequest = (id) => { setSelectedSubId(null); setConfirmDelete(id); };
+        const handleDeleteConfirm = () => { setSubs(subs.filter(s => s.id !== confirmDelete)); setConfirmDelete(null); };
+        
+        const handleReset = () => {
+            localStorage.removeItem('subscriptions');
+            localStorage.removeItem('categories');
+            localStorage.removeItem('darkMode');
+            window.location.reload();
+        }
+
+        const renderContent = () => {
+          switch (tab) {
+            case 'dashboard': return <Dashboard subs={subs} categories={categories} onSelectSub={setSelectedSubId} onShowForm={() => { setSubToEdit(null); setShowForm(true); }} />;
+            case 'calendar': return <CalendarView subs={subs} />;
+            case 'reports': return <ReportsView subs={subs} categories={categories} />;
+            case 'settings': return <SettingsView categories={categories} onReset={handleReset} isDarkMode={isDarkMode} onToggleDarkMode={() => setIsDarkMode(!isDarkMode)} />;
+            default: return <Dashboard subs={subs} categories={categories} onSelectSub={setSelectedSubId} onShowForm={() => { setSubToEdit(null); setShowForm(true); }} />;
+          }
+        };
+
+        const selectedSub = subs.find(s => s.id === selectedSubId);
+
+        const navItems = [
+          { key: 'dashboard', label: 'Dashboard', icon: '🏠' },
+          { key: 'calendar', label: 'Calendario', icon: '📅' },
+          { key: 'reports', label: 'Reportes', icon: '📊' },
+          { key: 'settings', label: 'Ajustes', icon: '⚙️' },
+        ];
+
+        return (
+          <div className="min-h-screen bg-gray-50 dark:bg-gray-900 font-sans">
+            <div className="max-w-md mx-auto px-4 pt-6 pb-28">
+              {renderContent()}
+            </div>
+
+            <nav className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-inner">
+              <div className="max-w-md mx-auto relative">
+                <div className="grid grid-cols-4 text-xs text-gray-500 dark:text-gray-400">
+                  {navItems.map(it => (
+                    <button key={it.key} onClick={() => { setTab(it.key); setSelectedSubId(null); }} className={`py-3 flex flex-col items-center gap-1 ${tab === it.key ? 'text-blue-600 dark:text-blue-400 font-semibold' : 'hover:text-gray-700 dark:hover:text-gray-200'}`}>
+                      <span className="text-2xl">{it.icon}</span>
+                      <span>{it.label}</span>
+                    </button>
+                  ))}
+                </div>
+                <p className="absolute bottom-1 right-2 text-[9px] text-gray-400 dark:text-gray-500 pointer-events-none">
+                    Diseñado por: Maribel Alba Olmedo
+                </p>
+              </div>
+            </nav>
+            
+            {selectedSub && <SubscriptionDetail sub={selectedSub} categories={categories} onClose={() => setSelectedSubId(null)} onEdit={handleEdit} onDelete={handleDeleteRequest}/>}
+            {showForm && <SubscriptionFormModal subToEdit={subToEdit} categories={categories} onSave={handleSaveSub} onClose={() => { setShowForm(false); setSubToEdit(null); }} />}
+            {confirmDelete && <ConfirmationModal message="¿Seguro que quieres eliminar esta suscripción?" onConfirm={handleDeleteConfirm} onCancel={() => setConfirmDelete(null)} />}
+          </div>
+        );
+      }
+
+      const container = document.getElementById('root');
+      const root = ReactDOM.createRoot(container);
+      root.render(<App />);
+    </script>
+</body>
+</html>
